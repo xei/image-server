@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  imageserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NGINX_VERSION: 1.18.0
+        HOST_NAME: img.example.com
+        SECRET_KEY: MY_SECRET_KEY
+    image: image-server
+    container_name: image-server
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # - ~/nginx/conf/front-server.conf:/etc/nginx/conf.d/front-server.conf:ro
+      - ~/ssl/cert/live/img.example.com/fullchain.pem:/etc/nginx/ssl/fullchain.pem
+      - ~/ssl/cert/live/img.example.com/privkey.pem:/etc/nginx/ssl/privkey.pem
+      - ~/ssl/cert/ssl-dhparams.pem:/etc/nginx/ssl/ssl-dhparams.pem
+      - ~/webroot:/usr/share/nginx/acme-challenge
+      - ~/nginx/log:/var/log/nginx
+      - ~/img/watermark.png:/usr/share/nginx/img/watermark.png
+      - ~/img/raw:/usr/share/nginx/img/raw
+      - ~/apps:/usr/share/nginx/apps
+      - ~/verification-files:/usr/share/nginx/verification-files
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+    restart: unless-stopped
+
+  checkcert:
+    image: certbot/certbot
+    container_name: certbot-renew
+    depends_on:
+      - fileserver
+    volumes:
+      - ~/ssl/cert:/etc/letsencrypt
+      - ~/ssl/log:/var/log/letsencrypt
+      - ~/webroot:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    restart: unless-stopped
